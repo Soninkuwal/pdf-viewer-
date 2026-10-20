@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>PDF.js Web Pro Viewer</title>
+
+  <!-- PDF.js Engine & TextLayer CSS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- PDF-Lib for Client-side Password Encryption (Password: 8888) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+
+  <style>
+    :root {
+      --toolbar-bg: #323639;
+      --toolbar-border: #1f2224;
+      --sidebar-bg: #26292b;
+      --viewer-bg: #525659;
+      --text-color: #f1f3f4;
+      --menu-text: #222222;
+      --accent-color: #0088cc;
+      --hover-bg: #44484b;
+      --active-bg: #5a5e62;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--viewer-bg);
+      color: var(--text-color);
+      user-select: none;
+    }
+
+    /* Top Toolbar (Desktop + Tablet) */
+    #toolbar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 48px;
+      background-color: var(--toolbar-bg);
+      border-bottom: 1px solid var(--toolbar-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 8px;
+      z-index: 1000;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+    }
+
+    .toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .tool-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: var(--text-color);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 32px;
+      height: 32px;
+      padding: 6px;
+      transition: background 0.15s ease;
+    }
+
+    .tool-btn:hover { background-color: var(--hover-bg); }
+    .tool-btn:active { background-color: var(--active-bg); }
+    .tool-btn svg { width: 18px; height: 18px; fill: currentColor; }
+
+    .page-indicator {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 13px;
+    }
+
+    .page-input {
+      width: 44px;
+      height: 28px;
+      background: #202124;
+      border: 1px solid #5f6368;
+      color: #fff;
+      border-radius: 3px;
+      text-align: center;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .zoom-select {
+      background: #202124;
+      border: 1px solid #5f6368;
+      color: #fff;
+      border-radius: 3px;
+      height: 28px;
+      padding: 0 4px;
+      font-size: 13px;
+      outline: none;
+      cursor: pointer;
+    }
+    
+    
+ /* PDF document title: URL title > PDF metadata > URL filename */
+    #document-title-bar {
+      position: absolute;
+      top: 48px;
+      left: 0;
+      right: 0;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      background: #272a2c;
+      border-bottom: 1px solid #1f2224;
+      z-index: 999;
+      overflow: hidden;
+    }
+    #document-title {
+      width: 100%;
+      color: #f1f3f4;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Workspace */
+    #main-container {
+      position: absolute;
+      top: 48px;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+    }
+
+    #sidebar {
+      width: 220px;
+      height: 100%;
+      background-color: var(--sidebar-bg);
+      border-right: 1px solid var(--toolbar-border);
+      overflow-y: auto;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      padding: 12px 6px;
+      gap: 12px;
+    }
+
+    #sidebar.show { display: flex; }
+
+    .thumbnail-card {
+      width: 170px;
+      background: #1e1e1e;
+      border: 2px solid transparent;
+      border-radius: 4px;
+      padding: 6px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .thumbnail-card.selected { border-color: var(--accent-color); }
+    .thumbnail-card canvas { max-width: 100%; height: auto; }
+    .thumbnail-num { font-size: 11px; color: #aaa; margin-top: 4px; }
+
+    #viewer-viewport {
+      flex: 1;
+      height: 100%;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px 0;
+      position: relative;
+    }
+
+    .page-wrapper {
+      position: relative;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+      background-color: #fff;
+    }
+
+    .page-wrapper canvas { display: block; }
+    .textLayer { user-select: text !important; }
+
+    /* Top Progress Bar */
+    #loading-bar {
+      position: absolute;
+      top: 48px;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: rgba(255,255,255,0.1);
+      z-index: 1001;
+      display: none;
+    }
+
+    #loading-progress {
+      width: 0%;
+      height: 100%;
+      background: var(--accent-color);
+      transition: width 0.2s ease;
+    }
+
+    /* Floating 3-Dot Button (Telegram Logo Position jaisa) */
+    #floating-menu-btn {
+      position: fixed;
+      right: 18px;
+      bottom: 44px; /* Bottom bar se thoda upar */
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, #0088cc, #006699);
+      border-radius: 50%;
+      border: none;
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 2000;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    #floating-menu-btn:active {
+      opacity: 0.7;
+      transform: scale(0.92);
+    }
+
+    #floating-menu-btn svg {
+      width: 24px;
+      height: 24px;
+      fill: currentColor;
+      stroke: #ffffff;
+      stroke-width: 3.2;
+      stroke-linecap: round;
+
+      display: block;
+    }
+
+    /* Official Mozilla PDF.js Style Popup Context Menu */
+    #pdfjs-popup-menu {
+      position: fixed;
+      right: 18px;
+      bottom: 130px;
+      width: 250px;
+      max-height: 70vh;
+      background: #ffffff;
+      color: var(--menu-text);
+      border-radius: 6px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+      border: 1px solid #dcdcdc;
+      overflow-y: auto;
+      display: none;
+      flex-direction: column;
+      z-index: 2001;
+      animation: menuFadeIn 0.15s ease-out;
+    }
+
+    #pdfjs-popup-menu.show {
+      display: flex;
+    }
+
+    @keyframes menuFadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .menu-item-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      font-size: 13.5px;
+      color: #222;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      text-align: left;
+      width: 100%;
+    }
+
+    .menu-item-row:hover {
+      background-color: #f1f3f4;
+    }
+
+    .menu-item-row:active {
+      background-color: #e8eaed;
+    }
+
+    .menu-item-row svg {
+      width: 18px;
+      height: 18px;
+      fill: #444;
+      flex-shrink: 0;
+    }
+
+    .menu-divider {
+      height: 1px;
+      background: #e0e0e0;
+      margin: 4px 0;
+    }
+
+    /* Mobile Bottom Bar */
+    #mobile-bottom-bar {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 50px;
+      background: var(--toolbar-bg);
+      border-top: 1px solid var(--toolbar-border);
+      justify-content: space-around;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    /* Custom Alert Popup Box (No URL Shown) */
+    #custom-popup {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(4px);
+      z-index: 30000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .popup-box {
+      background: #25282a;
+      border: 1px solid #444;
+      width: 90%;
+      max-width: 380px;
+      border-radius: 12px;
+      padding: 22px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+      text-align: center;
+      color: #fff;
+    }
+
+    .popup-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .popup-text {
+      font-size: 14px;
+      color: #ccc;
+      line-height: 1.5;
+      margin-bottom: 18px;
+    }
+
+    .popup-btn {
+      background: var(--accent-color);
+      color: #fff;
+      border: none;
+      padding: 8px 24px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    
+    /* Desktop पर Menu Option Hide */
+@media (min-width: 769px) {
+    .hide-desktop {
+        display: none !important;
+    }
+}
+
+    /* Responsive Handling */
+    @media (max-width: 768px) {
+      .hide-mobile { display: none !important; }
+      #mobile-bottom-bar { display: none; }
+      #viewer-viewport { padding-bottom: 60px; }
+      #sidebar {
+        position: fixed;
+        left: 0;
+        top: 48px;
+        bottom: 50px;
+        z-index: 1001;
+      }
+    }
+    @media (min-width: 769px) {
+      #floating-menu-btn {
+        bottom: 24px;
+      }
+      #pdfjs-popup-menu {
+        bottom: 80px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Loading Bar -->
+  <div id="loading-bar"><div id="loading-progress"></div></div>
+  
+  <!-- Loading Bar -->
+  <div id="document-title-bar" aria-live="polite">
+    <span id="document-title">PDF Viewer</span>
+  </div> 
+
+  <!-- Top Toolbar -->
+  <header id="toolbar">
+    <div class="toolbar-group">
+      <button class="tool-btn" id="tool-sidebar" title="Toggle Sidebar">
+        <svg viewBox="0 0 24 24"><path d="M3 3h18v18H3V3zm16 16V5H9v14h10zM7 5H5v14h2V5z"/></svg>
+      </button>
+      <button class="tool-btn" id="tool-prev" title="Previous Page">
+        <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+      </button>
+      <div class="page-indicator" id="tool-page-nav">
+        <input type="number" id="page-num" class="page-input" value="1" min="1">
+        <span>/ <span id="page-count">0</span></span>
+      </div>
+      <button class="tool-btn" id="tool-next" title="Next Page">
+        <svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+      </button>
+    </div>
+
+    <!-- Center Zoom Options -->
+    <div class="toolbar-group" id="tool-zoom-group">
+      <button class="tool-btn" id="tool-zoom-out" title="Zoom Out">
+        <svg viewBox="0 0 24 24"><path d="M19 13H5v-2h14v2z"/></svg>
+      </button>
+      <select id="zoom-select" class="zoom-select">
+        <option value="auto">Auto Fit</option>
+        <option value="page-fit">Page Fit</option>
+        <option value="page-width">Page Width</option>
+        <option value="0.75">75%</option>
+        <option value="1" selected>100%</option>
+        <option value="1.25">125%</option>
+        <option value="1.5">150%</option>
+        <option value="2">200%</option>
+      </select>
+      <button class="tool-btn" id="tool-zoom-in" title="Zoom In">
+        <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+      </button>
+    </div>
+
+    <!-- Right Controls -->
+    <div class="toolbar-group">
+      <button class="tool-btn hide-mobile" id="tool-rotate" title="Rotate">
+        <svg viewBox="0 0 24 24"><path d="M15.55 5.55L11 1v3.07C7.06 4.56 4 7.92 4 12s3.05 7.44 7 7.93v-2.02c-2.84-.48-5-2.94-5-5.91 0-3.31 2.69-6 6-6V10l4.55-4.45z"/></svg>
+      </button>
+      <button class="tool-btn hide-mobile" id="tool-fullscreen" title="Full Screen">
+        <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+      </button>
+      <button class="tool-btn hide-mobile" id="tool-print" title="Print">
+        <svg viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+      </button>
+      <button class="tool-btn hide-mobile" id="tool-download" title="Download">
+        <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Viewer Area -->
+  <div id="main-container">
+    <aside id="sidebar"></aside>
+    <main id="viewer-viewport"></main>
+  </div>
+
+  <!-- Mobile Bottom Toolbar -->
+  <div id="mobile-bottom-bar">
+    <button class="tool-btn" id="m-btn-sidebar"><svg viewBox="0 0 24 24"><path d="M3 3h18v18H3V3zm16 16V5H9v14h10zM7 5H5v14h2V5z"/></svg></button>
+    <button class="tool-btn" id="m-btn-prev"><svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg></button>
+    <span id="m-page-display" style="font-size: 13px;">1 / 1</span>
+    <button class="tool-btn" id="m-btn-next"><svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button>
+  </div>
+
+  <!-- Floating 3-Dot (⋮) Action Button -->
+  <button id="floating-menu-btn" title="More Options" aria-label="Open menu">
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M3 6H21"></path>
+    <path d="M3 12H21"></path>
+    <path d="M3 18H21"></path>
+  </svg>
+</button>
+
+  <!-- Official PDF.js Style Popup Context Menu -->
+  <div id="pdfjs-popup-menu">
+      <button class="menu-item-row hide-desktop" id="menu-tool-fullscreen">
+        <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+      <span>full screen</span>
+      </button>
+    <button class="menu-item-row" id="menu-open">
+      <svg viewBox="0 0 24 24"><path d="M19 4H5c-1.11 0-2 .9-2 2v12c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H5V8h14v10z"/></svg>
+      <span>Open File</span>
+    </button>
+    <button class="menu-item-row hide-desktop" id="menu-print">
+      <svg viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+      <span>Print</span>
+    </button>
+    <button class="menu-item-row hide-desktop" id="menu-save">
+      <svg viewBox="0 0 24 24"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
+      <span>Save / Download</span>
+    </button>
+
+    <div class="menu-divider"></div>
+
+    <button class="menu-item-row" id="menu-presentation">
+      <svg viewBox="0 0 24 24"><path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14zM8 15l7-4-7-4v8z"/></svg>
+      <span>Presentation Mode</span>
+    </button>
+    <button class="menu-item-row" id="menu-currentpage">
+      <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+      <span>Current Page</span>
+    </button>
+
+    <div class="menu-divider"></div>
+
+    <button class="menu-item-row" id="menu-firstpage">
+      <svg viewBox="0 0 24 24"><path d="M4 6h2v12H4zm14.59 0L13.17 11.41 18.59 16.83 20 15.41 15.41 10.83 20 6.24z"/></svg>
+      <span>Go to First Page</span>
+    </button>
+    <button class="menu-item-row" id="menu-lastpage">
+      <svg viewBox="0 0 24 24"><path d="M18 6h2v12h-2zM5.41 6L4 7.41 8.59 12 4 16.59 5.41 18l6-6z"/></svg>
+      <span>Go to Last Page</span>
+    </button>
+
+    <div class="menu-divider"></div>
+
+    <button class="menu-item-row hide-desktop" id="menu-rotate-cw">
+      <svg viewBox="0 0 24 24"><path d="M15.55 5.55L11 1v3.07C7.06 4.56 4 7.92 4 12s3.05 7.44 7 7.93v-2.02c-2.84-.48-5-2.94-5-5.91 0-3.31 2.69-6 6-6V10l4.55-4.45z"/></svg>
+      <span>Rotate Clockwise</span>
+    </button>
+    <button class="menu-item-row" id="menu-rotate-ccw">
+      <svg viewBox="0 0 24 24"><path d="M8.45 5.55L13 1v3.07C16.94 4.56 20 7.92 20 12s-3.05 7.44-7 7.93v-2.02c2.84-.48 5-2.94 5-5.91 0-3.31-2.69-6-6-6V10L8.45 5.55z"/></svg>
+      <span>Rotate Anti-Clockwise</span>
+    </button>
+
+    <div class="menu-divider"></div>
+
+    <button class="menu-item-row" id="menu-doc-props">
+      <svg viewBox="0 0 24 24"><path d="M11 17h2v-6h-2v6zm1-15C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2V7h-2v2z"/></svg>
+      <span>Document Properties...</span>
+    </button>
+  </div>
+
+  <input type="file" id="local-file-picker" accept="application/pdf" style="display: none;">
+
+  <!-- Custom Popup Alert (No URL visible) -->
+  <div id="custom-popup">
+    <div class="popup-box">
+      <div class="popup-title" id="custom-popup-title">Notification</div>
+      <div class="popup-text" id="custom-popup-text">Details</div>
+      <button class="popup-btn" onclick="hideCustomAlert()">OK</button>
+    </div>
+  </div>
+
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    const state = {
+      pdfDoc: null,
+      rawBytes: null,
+      currentPage: 1,
+      totalPages: 0,
+      scale: 1.0,
+      fitMode: 'auto',
+      rotation: 0,
+      pdfUrl: '',
+      downloadMode: '1', // '0'=hide, '1'=normal, '2'=password 8888
+      renderedPages: new Set()
+    };
+
+    const $ = id => document.getElementById(id);
+    const elements = {
+      viewport: $('viewer-viewport'),
+      documentTitle: $('document-title'),
+      sidebar: $('sidebar'),
+      pageNum: $('page-num'),
+      pageCount: $('page-count'),
+      zoomSelect: $('zoom-select'),
+      loadingBar: $('loading-bar'),
+      loadingProgress: $('loading-progress'),
+      mPageDisplay: $('m-page-display'),
+      floatingBtn: $('floating-menu-btn'),
+      popupMenu: $('pdfjs-popup-menu'),
+      filePicker: $('local-file-picker'),
+      popup: $('custom-popup'),
+      popupTitle: $('custom-popup-title'),
+      popupText: $('custom-popup-text')
+    };
+
+    function showCustomAlert(title, message) {
+      elements.popupTitle.textContent = title;
+      elements.popupText.textContent = message;
+      elements.popup.style.display = 'flex';
+    }
+
+    function hideCustomAlert() {
+      elements.popup.style.display = 'none';
+    }
+
+    // 1. URL Query Logic & Tool Visibility (1 = Show, 0 = Hide)
+    function parseURLSettings() {
+      const p = new URLSearchParams(window.location.search);
+
+      // Default sample fallback
+      /* state.pdfUrl = p.get('url') || 'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf'; */
+      
+      // PDF URL: Decode only if needed; do not use encodeURIComponent()
+function getDirectPdfUrl() {
+    const params = new URLSearchParams(window.location.search);
+    let url = params.get('url');
+
+    if (!url) {
+        return 'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf';
+    }
+
+    // Encoded URL हो तो उसे decode करें।
+    // पहले से सामान्य URL हो तो उसे वैसा ही रहने दें।
+    try {
+        if (/%[0-9a-fA-F]{2}/.test(url)) {
+            url = decodeURIComponent(url);
+        }
+    } catch (e) {
+        console.warn('URL decode नहीं हो सका:', e);
+    }
+
+    return url;
+}
+
+state.pdfUrl = getDirectPdfUrl();
+
+
+
+
+      state.documentTitle = (p.get('title') || '').trim() || getTitleFromUrl(state.pdfUrl) || 'PDF Viewer';
+      setDocumentTitle(state.documentTitle);
+      state.downloadMode = p.get('download') !== null ? p.get('download') : '1';
+
+      // Download Mode: 0 = Hide, 1 = Normal, 2 = Password 8888
+      if (state.downloadMode === '0') {
+        $('tool-download').style.display = 'none';$('menu-save').style.display = 'none';
+        window.addEventListener('keydown', e => {
+          if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) e.preventDefault();
+        });
+      }
+
+      // Hide/Show tools based on 0 / 1 parameter
+      const applyVisibility = (param, elIds) => {
+        const val = p.get(param);
+        if (val === '0') {
+          elIds.forEach(id => {
+            const el = $(id);
+            if (el) el.style.display = 'none';
+          });
+        }
+      };
+
+      applyVisibility('sidebar', ['tool-sidebar', 'm-btn-sidebar']);
+      applyVisibility('print', ['tool-print', 'menu-print']);
+      applyVisibility('rotate', ['tool-rotate', 'menu-rotate-cw', 'menu-rotate-ccw']);
+      applyVisibility('fullscreen', ['tool-fullscreen', 'menu-presentation']);
+      applyVisibility('zoom', ['tool-zoom-group']);
+      applyVisibility('nav', ['tool-prev', 'tool-next', 'tool-page-nav', 'm-btn-prev', 'm-btn-next', 'm-page-display']);
+      applyVisibility('menu', ['floating-menu-btn']);
+    }
+
+    function getTitleFromUrl(url) {
+      try {
+        const parsed = new URL(url, window.location.href);
+        const fileName = decodeURIComponent(parsed.pathname.split('/').filter(Boolean).pop() || '');
+        return fileName.replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').trim();
+      } catch (_) {
+        return '';
+      }
+    }
+
+    function setDocumentTitle(title) {
+      const cleanTitle = (title || '').trim() || 'PDF Viewer';
+      elements.documentTitle.textContent = cleanTitle;
+      elements.documentTitle.title = cleanTitle;
+      document.title = cleanTitle + ' | PDF Viewer';
+    }
+
+    async function applyPdfMetadataTitle(pdf) {
+      try {
+        const metadata = await pdf.getMetadata();
+        const metadataTitle = metadata && metadata.info && metadata.info.Title
+          ? String(metadata.info.Title).trim() : '';
+        const urlTitle = new URLSearchParams(window.location.search).get('title');
+        // Explicit title in viewer URL has priority, then embedded PDF title, then PDF URL filename.
+        const finalTitle = (urlTitle || '').trim() || metadataTitle || getTitleFromUrl(state.pdfUrl) || 'PDF Viewer';
+        state.documentTitle = finalTitle;
+        setDocumentTitle(finalTitle);
+      } catch (_) {
+        setDocumentTitle(state.documentTitle || getTitleFromUrl(state.pdfUrl) || 'PDF Viewer');
+      }
+    }
+
+    // 2. Fetch and Stream PDF
+    async function loadDocument() {
+      elements.loadingBar.style.display = 'block';
+      elements.loadingProgress.style.width = '20%';
+
+      try {
+        const response = await fetch(state.pdfUrl);
+        if (!response.ok) throw new Error('PDF file response code: ' + response.status);
+        const buffer = await response.arrayBuffer();
+        state.rawBytes = new Uint8Array(buffer);
+
+        const loadingTask = pdfjsLib.getDocument({
+          data: state.rawBytes,
+          cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+          cMapPacked: true
+        });
+
+        state.pdfDoc = await loadingTask.promise;
+        state.totalPages = state.pdfDoc.numPages;
+        elements.pageCount.textContent = state.totalPages;
+        elements.pageNum.max = state.totalPages;
+        updatePageDisplays(1);
+
+        elements.loadingProgress.style.width = '100%';
+        setTimeout(() => { elements.loadingBar.style.display = 'none'; }, 200);
+
+        buildPageContainers();
+        buildThumbnails();
+        calculateScaleAndRender();
+      } catch (err) {
+        elements.loadingBar.style.display = 'none';
+        showCustomAlert('Error', 'PDF लोड नहीं हो सकी: ' + err.message);
+      }
+    }
+
+    // 3. Setup Virtual Placeholders
+    function buildPageContainers() {
+      elements.viewport.innerHTML = '';
+      state.renderedPages.clear();
+
+      for (let i = 1; i <= state.totalPages; i++) {
+        const wrap = document.createElement('div');
+        wrap.className = 'page-wrapper';
+        wrap.id = `page-wrap-${i}`;
+        wrap.dataset.pageNum = i;
+        wrap.style.minHeight = '650px';
+        wrap.style.width = '100%';
+        elements.viewport.appendChild(wrap);
+      }
+
+      setupIntersection();
+    }
+
+    // 4. Memory-Safe Lazy Canvas Rendering
+    let observer;
+    function setupIntersection() {
+      if (observer) observer.disconnect();
+      observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          const num = parseInt(entry.target.dataset.pageNum);
+          if (entry.isIntersecting) {
+            renderSinglePage(num);
+            updatePageDisplays(num);
+          }
+        });
+      }, { root: elements.viewport, rootMargin: '300px 0px', threshold: 0.1 });
+
+      document.querySelectorAll('.page-wrapper').forEach(el => observer.observe(el));
+    }
+
+    async function renderSinglePage(num) {
+      if (state.renderedPages.has(num)) return;
+      state.renderedPages.add(num);
+
+      const container = $(`page-wrap-${num}`);
+      if (!container) return;
+
+      const page = await state.pdfDoc.getPage(num);
+      const viewport = page.getViewport({ scale: state.scale, rotation: state.rotation });
+
+      container.style.width = `${viewport.width}px`;
+      container.style.height = `${viewport.height}px`;
+      container.innerHTML = '';
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const ratio = window.devicePixelRatio || 1;
+
+      canvas.width = Math.floor(viewport.width * ratio);
+      canvas.height = Math.floor(viewport.height * ratio);
+      canvas.style.width = `${viewport.width}px`;
+      canvas.style.height = `${viewport.height}px`;
+
+      container.appendChild(canvas);
+
+      await page.render({
+        canvasContext: ctx,
+        viewport: viewport,
+        transform: ratio !== 1 ? [ratio, 0, 0, ratio, 0, 0] : null
+      }).promise;
+
+      // Text Layer
+      const textContent = await page.getTextContent();
+      const textDiv = document.createElement('div');
+      textDiv.className = 'textLayer';
+      textDiv.style.width = `${viewport.width}px`;
+      textDiv.style.height = `${viewport.height}px`;
+      container.appendChild(textDiv);
+
+      pdfjsLib.renderTextLayer({
+        textContentSource: textContent,
+        container: textDiv,
+        viewport: viewport,
+        textDivs: []
+      });
+    }
+
+    // 5. Thumbnails Sidebar
+    async function buildThumbnails() {
+      elements.sidebar.innerHTML = '';
+      for (let i = 1; i <= state.totalPages; i++) {
+        const card = document.createElement('div');
+        card.className = 'thumbnail-card';
+        card.id = `thumb-${i}`;
+        card.onclick = () => scrollToPage(i);
+
+        const canvas = document.createElement('canvas');
+        const numLabel = document.createElement('span');
+        numLabel.className = 'thumbnail-num';
+        numLabel.textContent = `Page ${i}`;
+
+        card.appendChild(canvas);
+        card.appendChild(numLabel);
+        elements.sidebar.appendChild(card);
+
+        state.pdfDoc.getPage(i).then(page => {
+          const v = page.getViewport({ scale: 0.22 });
+          canvas.width = v.width;
+          canvas.height = v.height;
+          page.render({ canvasContext: canvas.getContext('2d'), viewport: v });
+        });
+      }
+    }
+
+    function updatePageDisplays(num) {
+      state.currentPage = num;
+      elements.pageNum.value = num;
+      elements.mPageDisplay.textContent = `${num} / ${state.totalPages}`;
+      document.querySelectorAll('.thumbnail-card').forEach(c => c.classList.remove('selected'));
+      const currThumb = $(`thumb-${num}`);
+      if (currThumb) currThumb.classList.add('selected');
+    }
+
+    async function calculateScaleAndRender() {
+      if (!state.pdfDoc) return;
+      const firstPage = await state.pdfDoc.getPage(1);
+      const viewW = elements.viewport.clientWidth - (window.innerWidth <= 768 ? 16 : 48);
+      const viewH = elements.viewport.clientHeight - 48;
+      const unscaled = firstPage.getViewport({ scale: 1.0, rotation: state.rotation });
+
+      if (state.fitMode === 'page-width') {
+        state.scale = viewW / unscaled.width;
+      } else if (state.fitMode === 'page-fit') {
+        state.scale = Math.min(viewW / unscaled.width, viewH / unscaled.height);
+      } else if (state.fitMode === 'auto') {
+        state.scale = Math.min(viewW / unscaled.width, 1.25);
+      }
+
+      state.renderedPages.clear();
+      document.querySelectorAll('.page-wrapper').forEach(el => {
+        const v = firstPage.getViewport({ scale: state.scale, rotation: state.rotation });
+        el.style.width = `${v.width}px`;
+        el.style.height = `${v.height}px`;
+        el.innerHTML = '';
+      });
+
+      setupIntersection();
+    }
+
+    function scrollToPage(num) {
+      if (num < 1 || num > state.totalPages) return;
+      const target = $(`page-wrap-${num}`);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        updatePageDisplays(num);
+      }
+    }
+
+    // 6. Download Logic (download=0 Hide, download=1 Normal, download=2 Password: 8888)
+    async function executeDownload() {
+      if (state.downloadMode === '0') return;
+
+      elements.loadingBar.style.display = 'block';
+      elements.loadingProgress.style.width = '60%';
+
+      try {
+        let finalBlob;
+        const filename = state.pdfUrl.split('/').pop().split('?')[0] || 'document.pdf';
+
+        if (state.downloadMode === '2') {
+          // Encrypt document client-side with user password '8888'
+          const pdfDoc = await PDFLib.PDFDocument.load(state.rawBytes);
+          await pdfDoc.encrypt({
+            userPassword: '8888',
+            ownerPassword: '8888',
+            permissions: {
+              printing: 'highResolution',
+              modifying: false,
+              copying: false,
+              annotating: false,
+              fillingForms: false,
+              contentAccessibility: true,
+              documentAssembly: false
+            }
+          });
+          const encryptedBytes = await pdfDoc.save();
+          finalBlob = new Blob([encryptedBytes], { type: 'application/pdf' });
+          showCustomAlert('डाउनलोड पूर्ण', 'PDF डाउनलोड हो गई है। इसे ओपन करने पर पासवर्ड "8888" दर्ज करें।');
+        } else {
+          // Normal Direct Download (download=1)
+          finalBlob = new Blob([state.rawBytes], { type: 'application/pdf' });
+        }
+
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(finalBlob);
+        link.download = state.downloadMode === '2' ? `protected_${filename}` : filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (err) {
+        showCustomAlert('Error', 'डाउनलोड विफल रहा: ' + err.message);
+      } finally {
+        elements.loadingBar.style.display = 'none';
+      }
+    }
+
+    // 7. Event Handlers & Menu Connections
+    $('tool-prev').onclick = () => scrollToPage(state.currentPage - 1);$('tool-next').onclick = () => scrollToPage(state.currentPage + 1);
+    $('m-btn-prev').onclick = () => scrollToPage(state.currentPage - 1);$('m-btn-next').onclick = () => scrollToPage(state.currentPage + 1);
+
+    elements.pageNum.onchange = (e) => {
+      let p = parseInt(e.target.value) || 1;
+      scrollToPage(Math.min(Math.max(1, p), state.totalPages));
+    };
+
+    $('tool-zoom-in').onclick = () => {
+      state.fitMode = 'custom';
+      state.scale = +(state.scale + 0.25).toFixed(2);
+      elements.zoomSelect.value = state.scale;
+      calculateScaleAndRender();
+    };
+
+    $('tool-zoom-out').onclick = () => {
+      if (state.scale <= 0.4) return;
+      state.fitMode = 'custom';
+      state.scale = +(state.scale - 0.25).toFixed(2);
+      elements.zoomSelect.value = state.scale;
+      calculateScaleAndRender();
+    };
+
+    elements.zoomSelect.onchange = (e) => {
+      const val = e.target.value;
+      state.fitMode = ['auto', 'page-fit', 'page-width'].includes(val) ? val : 'custom';
+      if (state.fitMode === 'custom') state.scale = parseFloat(val);
+      calculateScaleAndRender();
+    };
+
+    const handleRotateCW = () => {
+      state.rotation = (state.rotation + 90) % 360;
+      calculateScaleAndRender();
+    };
+    const handleRotateCCW = () => {
+      state.rotation = (state.rotation - 90 + 360) % 360;
+      calculateScaleAndRender();
+    };
+    $('tool-rotate').onclick = handleRotateCW;
+
+    const toggleSidebar = () => elements.sidebar.classList.toggle('show');
+    $('tool-sidebar').onclick = toggleSidebar;
+    $('m-btn-sidebar').onclick = toggleSidebar;
+
+    const handleFullscreen = () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    };
+    $('tool-fullscreen').onclick = handleFullscreen;
+    
+    $('menu-tool-fullscreen').onclick = handleFullscreen;
+
+    const handlePrint = () => window.print();
+    $('tool-print').onclick = handlePrint;
+    $('tool-download').onclick = executeDownload;
+
+    // Floating 3-Dot Button Click
+    elements.floatingBtn.onclick = (e) => {
+      e.stopPropagation();
+      elements.popupMenu.classList.toggle('show');
+    };
+
+    document.addEventListener('click', (e) => {
+      if (!elements.popupMenu.contains(e.target) && e.target !== elements.floatingBtn) {
+        elements.popupMenu.classList.remove('show');
+      }
+    });
+
+    // Official Popup Menu Item Events
+    $('menu-open').onclick = () => {
+      elements.popupMenu.classList.remove('show');
+      elements.filePicker.click();
+    };
+
+    elements.filePicker.onchange = (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const fileReader = new FileReader();
+        fileReader.onload = function() {
+          state.rawBytes = new Uint8Array(this.result);
+          pdfjsLib.getDocument({ data: state.rawBytes }).promise.then(pdf => {
+            state.pdfDoc = pdf;
+            state.totalPages = pdf.numPages;
+            elements.pageCount.textContent = state.totalPages;
+            elements.pageNum.max = state.totalPages;
+            buildPageContainers();
+            buildThumbnails();
+            calculateScaleAndRender();
+          });
+        };
+        fileReader.readAsArrayBuffer(file);
+      }
+    };
+
+    $('menu-print').onclick = () => { elements.popupMenu.classList.remove('show'); handlePrint(); };$('menu-save').onclick = () => { elements.popupMenu.classList.remove('show'); executeDownload(); };
+    $('menu-presentation').onclick = () => { elements.popupMenu.classList.remove('show'); handleFullscreen(); };$('menu-currentpage').onclick = () => {
+      elements.popupMenu.classList.remove('show');
+      showCustomAlert('Current Page', `आप अभी पेज नंबर ${state.currentPage} पर हैं।`);
+    };
+    $('menu-firstpage').onclick = () => { elements.popupMenu.classList.remove('show'); scrollToPage(1); };
+    $('menu-lastpage').onclick = () => { elements.popupMenu.classList.remove('show'); scrollToPage(state.totalPages); };
+    $('menu-rotate-cw').onclick = () => { elements.popupMenu.classList.remove('show'); handleRotateCW(); };
+    $('menu-rotate-ccw').onclick = () => { elements.popupMenu.classList.remove('show'); handleRotateCCW(); };
+    $('menu-doc-props').onclick = () => {
+      elements.popupMenu.classList.remove('show');
+      showCustomAlert('Document Properties', `Total Pages: ${state.totalPages}\nCurrent Page: ${state.currentPage}\nRotation: ${state.rotation}°`);
+    };
+
+    window.addEventListener('resize', () => {
+      if (state.fitMode !== 'custom') calculateScaleAndRender();
+    });
+
+    // Start App
+    parseURLSettings();
+    loadDocument();
+  </script>
+</body>
+</html>

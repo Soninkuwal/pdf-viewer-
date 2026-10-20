@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>PDF.js Web Pro Viewer</title>
+
+  <!-- PDF.js Engine & Styles -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- PDF-Lib for Client-Side Password Encryption (#8888) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+
+  <style>
+    :root {
+      --bg-dark: #202124;
+      --toolbar-bg: #323639;
+      --toolbar-border: #1f2224;
+      --sidebar-bg: #2a2e31;
+      --canvas-bg: #525659;
+      --text-main: #f1f3f4;
+      --accent: #8ab4f8;
+      --active-btn: #474b4e;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background-color: var(--canvas-bg);
+      color: var(--text-main);
+    }
+
+    /* Top Desktop Toolbar */
+    #toolbar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 48px;
+      background-color: var(--toolbar-bg);
+      border-bottom: 1px solid var(--toolbar-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      z-index: 1000;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+
+    .toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tool-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: var(--text-main);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px;
+      min-width: 34px;
+      height: 34px;
+      transition: background 0.15s ease;
+    }
+
+    .tool-btn:hover { background-color: var(--active-btn); }
+    .tool-btn:active { background-color: rgba(255,255,255,0.2); }
+    .tool-btn svg { width: 18px; height: 18px; fill: currentColor; }
+
+    .page-box {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 13px;
+    }
+
+    .page-input {
+      width: 44px;
+      height: 28px;
+      background: #202124;
+      border: 1px solid #5f6368;
+      color: #fff;
+      border-radius: 3px;
+      text-align: center;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .page-input:focus { border-color: var(--accent); }
+
+    .zoom-select {
+      background: #202124;
+      border: 1px solid #5f6368;
+      color: #fff;
+      border-radius: 3px;
+      height: 28px;
+      padding: 0 4px;
+      font-size: 13px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    /* Main Container */
+    #main-container {
+      position: absolute;
+      top: 48px;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+    }
+
+    /* Sidebar / Thumbnail list */
+    #sidebar {
+      width: 220px;
+      height: 100%;
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--toolbar-border);
+      overflow-y: auto;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      padding: 12px 6px;
+      gap: 12px;
+    }
+
+    #sidebar.show { display: flex; }
+
+    .thumbnail-card {
+      width: 170px;
+      background: #1e1e1e;
+      border: 2px solid transparent;
+      border-radius: 4px;
+      padding: 6px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .thumbnail-card.selected { border-color: var(--accent); }
+    .thumbnail-card canvas { max-width: 100%; height: auto; }
+    .thumbnail-num { font-size: 11px; color: #aaa; margin-top: 4px; }
+
+    /* PDF Scroll Viewport */
+    #viewer-viewport {
+      flex: 1;
+      height: 100%;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px 0;
+      position: relative;
+    }
+
+    .page-wrapper {
+      position: relative;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+      background-color: #fff;
+    }
+
+    .page-wrapper canvas { display: block; }
+    .textLayer { user-select: text !important; }
+
+    /* Top Progress Bar */
+    #loading-bar {
+      position: absolute;
+      top: 48px;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: rgba(255,255,255,0.1);
+      z-index: 1001;
+      display: none;
+    }
+
+    #loading-progress {
+      width: 0%;
+      height: 100%;
+      background: var(--accent);
+      transition: width 0.2s ease;
+    }
+
+    /* Mobile Bottom Navigation Bar & Popup Action Menu */
+    #mobile-bottom-bar {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 52px;
+      background: var(--toolbar-bg);
+      border-top: 1px solid var(--toolbar-border);
+      justify-content: space-around;
+      align-items: center;
+      z-index: 1000;
+      box-shadow: 0 -2px 8px rgba(0,0,0,0.4);
+    }
+
+    #mobile-action-menu {
+      display: none;
+      position: fixed;
+      bottom: 60px;
+      right: 12px;
+      background: #2b2e31;
+      border: 1px solid #444;
+      border-radius: 8px;
+      padding: 6px 0;
+      z-index: 1002;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.7);
+      flex-direction: column;
+      min-width: 170px;
+    }
+
+    #mobile-action-menu.open { display: flex; }
+
+    .menu-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 14px;
+      text-align: left;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    .menu-item:active { background-color: var(--active-btn); }
+    .menu-item svg { width: 18px; height: 18px; fill: currentColor; }
+
+    /* Responsive Adaptation */
+    @media (max-width: 768px) {
+      .hide-mobile { display: none !important; }
+      #mobile-bottom-bar { display: flex; }
+      #viewer-viewport { padding-bottom: 64px; }
+      #sidebar {
+        position: fixed;
+        left: 0;
+        top: 48px;
+        bottom: 52px;
+        z-index: 1001;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Loading Bar -->
+  <div id="loading-bar"><div id="loading-progress"></div></div>
+
+  <!-- Top Toolbar -->
+  <header id="toolbar">
+    <div class="toolbar-group">
+      <button class="tool-btn" id="tool-sidebar" title="Toggle Sidebar">
+        <svg viewBox="0 0 24 24"><path d="M3 3h18v18H3V3zm16 16V5H9v14h10zM7 5H5v14h2V5z"/></svg>
+      </button>
+      <button class="tool-btn" id="tool-prev" title="Previous Page">
+        <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+      </button>
+      <div class="page-box" id="tool-page-nav">
+        <input type="number" id="page-num" class="page-input" value="1" min="1">
+        <span>/ <span id="page-count">0</span></span>
+      </div>
+      <button class="tool-btn" id="tool-next" title="Next Page">
+        <svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+      </button>
+    </div>
+
+    <div class="toolbar-group" id="tool-zoom-group">
+      <button class="tool-btn hide-mobile" id="tool-zoom-out" title="Zoom Out">
+        <svg viewBox="0 0 24 24"><path d="M19 13H5v-2h14v2z"/></svg>
+      </button>
+      <select id="zoom-select" class="zoom-select">
+        <option value="auto">Auto Fit</option>
+        <option value="page-fit">Page Fit</option>
+        <option value="page-width">Page Width</option>
+        <option value="0.75">75%</option>
+        <option value="1" selected>100%</option>
+        <option value="1.25">125%</option>
+        <option value="1.5">150%</option>
+        <option value="2">200%</option>
+      </select>
+      <button class="tool-btn hide-mobile" id="tool-zoom-in" title="Zoom In">
+        <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+      </button>
+    </div>
+
+    <div class="toolbar-group">
+      <button class="tool-btn hide-mobile" id="tool-rotate" title="Rotate Clockwise">
+        <svg viewBox="0 0 24 24"><path d="M15.55 5.55L11 1v3.07C7.06 4.56 4 7.92 4 12s3.05 7.44 7 7.93v-2.02c-2.84-.48-5-2.94-5-5.91 0-3.31 2.69-6 6-6V10l4.55-4.45zM19.93 11c-.17-1.39-.72-2.65-1.55-3.69l-1.43 1.43c.55.73.92 1.61 1.04 2.56h1.94zm-1.04 3.56c-.12.95-.49 1.83-1.04 2.56l1.43 1.43c.83-1.04 1.38-2.3 1.55-3.69h-1.94z"/></svg>
+      </button>
+      <button class="tool-btn hide-mobile" id="tool-fullscreen" title="Fullscreen">
+        <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+      </button>
+      <button class="tool-btn hide-mobile" id="tool-print" title="Print PDF">
+        <svg viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+      </button>
+      <button class="tool-btn hide-mobile" id="tool-download" title="Download PDF">
+        <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Viewer Workspace -->
+  <div id="main-container">
+    <aside id="sidebar"></aside>
+    <main id="viewer-viewport"></main>
+  </div>
+
+  <!-- Mobile Bottom Toolbar -->
+  <div id="mobile-bottom-bar">
+    <button class="tool-btn" id="m-btn-sidebar"><svg viewBox="0 0 24 24"><path d="M3 3h18v18H3V3zm16 16V5H9v14h10zM7 5H5v14h2V5z"/></svg></button>
+    <button class="tool-btn" id="m-btn-prev"><svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg></button>
+    <span id="m-page-display" style="font-size: 13px;">1 / 1</span>
+    <button class="tool-btn" id="m-btn-next"><svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button>
+    <button class="tool-btn" id="m-btn-menu" title="Actions Popup">
+      <svg viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+    </button>
+  </div>
+
+  <!-- Mobile Popup Action Menu -->
+  <div id="mobile-action-menu">
+    <button class="menu-item" id="m-action-rotate">
+      <svg viewBox="0 0 24 24"><path d="M15.55 5.55L11 1v3.07C7.06 4.56 4 7.92 4 12s3.05 7.44 7 7.93v-2.02c-2.84-.48-5-2.94-5-5.91 0-3.31 2.69-6 6-6V10l4.55-4.45z"/></svg>
+      <span>Rotate</span>
+    </button>
+    <button class="menu-item" id="m-action-download">
+      <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
+      <span>Download / Save</span>
+    </button>
+    <button class="menu-item" id="m-action-print">
+      <svg viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+      <span>Print</span>
+    </button>
+  </div>
+
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    const state = {
+      pdfDoc: null,
+      rawBytes: null,
+      currentPage: 1,
+      totalPages: 0,
+      scale: 1.0,
+      fitMode: 'auto',
+      rotation: 0,
+      pdfUrl: '',
+      downloadMode: '1', // '0' = password (#8888), '1' = direct, '2' = hide
+      renderedPages: new Set()
+    };
+
+    const $ = id => document.getElementById(id);
+    const elements = {
+      viewport: $('viewer-viewport'),
+      sidebar: $('sidebar'),
+      pageNum: $('page-num'),
+      pageCount: $('page-count'),
+      zoomSelect: $('zoom-select'),
+      loadingBar: $('loading-bar'),
+      loadingProgress: $('loading-progress'),
+      mPageDisplay: $('m-page-display'),
+      mobileMenu: $('mobile-action-menu')
+    };
+
+    // 1. URL Parameters Handling & Tool Hiding
+    function parseURLSettings() {
+      const p = new URLSearchParams(window.location.search);
+      
+      // Default sample fallback
+      state.pdfUrl = p.get('url') || 'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf';
+      state.downloadMode = p.get('download') !== null ? p.get('download') : '1';
+
+      // Download Mode 2: Hide completely
+      if (state.downloadMode === '2') {
+        $('tool-download').style.display = 'none';$('m-action-download').style.display = 'none';
+        // Block save keyboard shortcuts
+        window.addEventListener('keydown', e => {
+          if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) e.preventDefault();
+        });
+      }
+
+      // Hide specific individual tools via parameters (0 = Hide)
+      if (p.get('sidebar') === '0') {
+        $('tool-sidebar').style.display = 'none';$('m-btn-sidebar').style.display = 'none';
+      }
+      if (p.get('print') === '0') {
+        $('tool-print').style.display = 'none';$('m-action-print').style.display = 'none';
+        window.addEventListener('keydown', e => {
+          if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) e.preventDefault();
+        });
+      }
+      if (p.get('rotate') === '0') {
+        $('tool-rotate').style.display = 'none';$('m-action-rotate').style.display = 'none';
+      }
+      if (p.get('zoom') === '0') {
+        $('tool-zoom-group').style.display = 'none';
+      }
+      if (p.get('nav') === '0') {
+        $('tool-prev').style.display = 'none';
+        $('tool-next').style.display = 'none';$('tool-page-nav').style.display = 'none';
+      }
+      if (p.get('fullscreen') === '0') {
+        $('tool-fullscreen').style.display = 'none';
+      }
+    }
+
+    // 2. Load and Stream PDF File
+    async function loadDocument() {
+      elements.loadingBar.style.display = 'block';
+      elements.loadingProgress.style.width = '20%';
+
+      try {
+        const response = await fetch(state.pdfUrl);
+        if (!response.ok) throw new Error('PDF नेटवर्क अनुरोध विफल रहा');
+        const arrayBuffer = await response.arrayBuffer();
+        state.rawBytes = new Uint8Array(arrayBuffer);
+
+        const loadingTask = pdfjsLib.getDocument({
+          data: state.rawBytes,
+          cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+          cMapPacked: true
+        });
+
+        state.pdfDoc = await loadingTask.promise;
+        state.totalPages = state.pdfDoc.numPages;
+        elements.pageCount.textContent = state.totalPages;
+        elements.pageNum.max = state.totalPages;
+        updatePageDisplays(1);
+
+        elements.loadingProgress.style.width = '100%';
+        setTimeout(() => { elements.loadingBar.style.display = 'none'; }, 200);
+
+        buildPageContainers();
+        buildThumbnails();
+        calculateScaleAndRender();
+      } catch (err) {
+        elements.loadingBar.style.display = 'none';
+        alert('PDF लोड नहीं हो सकी: ' + err.message);
+      }
+    }
+
+    // 3. Page Container Generation
+    function buildPageContainers() {
+      elements.viewport.innerHTML = '';
+      state.renderedPages.clear();
+
+      for (let i = 1; i <= state.totalPages; i++) {
+        const wrap = document.createElement('div');
+        wrap.className = 'page-wrapper';
+        wrap.id = `page-wrap-${i}`;
+        wrap.dataset.pageNum = i;
+        wrap.style.minHeight = '600px';
+        wrap.style.width = '100%';
+        elements.viewport.appendChild(wrap);
+      }
+
+      setupIntersection();
+    }
+
+    // 4. Memory-Safe Lazy Rendering (IntersectionObserver)
+    let observer;
+    function setupIntersection() {
+      if (observer) observer.disconnect();
+      observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          const num = parseInt(entry.target.dataset.pageNum);
+          if (entry.isIntersecting) {
+            renderSinglePage(num);
+            updatePageDisplays(num);
+          }
+        });
+      }, { root: elements.viewport, rootMargin: '250px 0px', threshold: 0.1 });
+
+      document.querySelectorAll('.page-wrapper').forEach(el => observer.observe(el));
+    }
+
+    async function renderSinglePage(num) {
+      if (state.renderedPages.has(num)) return;
+      state.renderedPages.add(num);
+
+      const container = $(`page-wrap-${num}`);
+      if (!container) return;
+
+      const page = await state.pdfDoc.getPage(num);
+      const viewport = page.getViewport({ scale: state.scale, rotation: state.rotation });
+
+      container.style.width = `${viewport.width}px`;
+      container.style.height = `${viewport.height}px`;
+      container.innerHTML = '';
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const ratio = window.devicePixelRatio || 1;
+
+      canvas.width = Math.floor(viewport.width * ratio);
+      canvas.height = Math.floor(viewport.height * ratio);
+      canvas.style.width = `${viewport.width}px`;
+      canvas.style.height = `${viewport.height}px`;
+
+      container.appendChild(canvas);
+
+      await page.render({
+        canvasContext: ctx,
+        viewport: viewport,
+        transform: ratio !== 1 ? [ratio, 0, 0, ratio, 0, 0] : null
+      }).promise;
+
+      // Text Layer for highlighting & copying
+      const textContent = await page.getTextContent();
+      const textDiv = document.createElement('div');
+      textDiv.className = 'textLayer';
+      textDiv.style.width = `${viewport.width}px`;
+      textDiv.style.height = `${viewport.height}px`;
+      container.appendChild(textDiv);
+
+      pdfjsLib.renderTextLayer({
+        textContentSource: textContent,
+        container: textDiv,
+        viewport: viewport,
+        textDivs: []
+      });
+    }
+
+    // 5. Thumbnails Generator
+    async function buildThumbnails() {
+      elements.sidebar.innerHTML = '';
+      for (let i = 1; i <= state.totalPages; i++) {
+        const card = document.createElement('div');
+        card.className = 'thumbnail-card';
+        card.id = `thumb-${i}`;
+        card.onclick = () => scrollToPage(i);
+
+        const canvas = document.createElement('canvas');
+        const numLabel = document.createElement('span');
+        numLabel.className = 'thumbnail-num';
+        numLabel.textContent = `Page ${i}`;
+
+        card.appendChild(canvas);
+        card.appendChild(numLabel);
+        elements.sidebar.appendChild(card);
+
+        state.pdfDoc.getPage(i).then(page => {
+          const v = page.getViewport({ scale: 0.22 });
+          canvas.width = v.width;
+          canvas.height = v.height;
+          page.render({ canvasContext: canvas.getContext('2d'), viewport: v });
+        });
+      }
+    }
+
+    function updatePageDisplays(num) {
+      state.currentPage = num;
+      elements.pageNum.value = num;
+      elements.mPageDisplay.textContent = `${num} / ${state.totalPages}`;
+      document.querySelectorAll('.thumbnail-card').forEach(c => c.classList.remove('selected'));
+      const currThumb = $(`thumb-${num}`);
+      if (currThumb) currThumb.classList.add('selected');
+    }
+
+    // 6. Viewport Scaler
+    async function calculateScaleAndRender() {
+      if (!state.pdfDoc) return;
+      const firstPage = await state.pdfDoc.getPage(1);
+      const viewW = elements.viewport.clientWidth - (window.innerWidth <= 768 ? 16 : 48);
+      const viewH = elements.viewport.clientHeight - 48;
+      const unscaled = firstPage.getViewport({ scale: 1.0, rotation: state.rotation });
+
+      if (state.fitMode === 'page-width') {
+        state.scale = viewW / unscaled.width;
+      } else if (state.fitMode === 'page-fit') {
+        state.scale = Math.min(viewW / unscaled.width, viewH / unscaled.height);
+      } else if (state.fitMode === 'auto') {
+        state.scale = Math.min(viewW / unscaled.width, 1.25);
+      }
+
+      state.renderedPages.clear();
+      document.querySelectorAll('.page-wrapper').forEach(el => {
+        const v = firstPage.getViewport({ scale: state.scale, rotation: state.rotation });
+        el.style.width = `${v.width}px`;
+        el.style.height = `${v.height}px`;
+        el.innerHTML = '';
+      });
+
+      setupIntersection();
+    }
+
+    function scrollToPage(num) {
+      if (num < 1 || num > state.totalPages) return;
+      const target = $(`page-wrap-${num}`);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        updatePageDisplays(num);
+      }
+    }
+
+    // 7. Secure Download Logic (download=0, 1, 2)
+    async function executeDownload() {
+      if (state.downloadMode === '2') return;
+
+      elements.loadingBar.style.display = 'block';
+      elements.loadingProgress.style.width = '60%';
+
+      try {
+        let finalBlob;
+        const filename = state.pdfUrl.split('/').pop().split('?')[0] || 'document.pdf';
+
+        if (state.downloadMode === '0') {
+          // Encrypt PDF with password #8888
+          const pdfDoc = await PDFLib.PDFDocument.load(state.rawBytes);
+          await pdfDoc.encrypt({
+            userPassword: '#8888',
+            ownerPassword: '#8888',
+            permissions: {
+              printing: 'highResolution',
+              modifying: false,
+              copying: false,
+              annotating: false,
+              fillingForms: false,
+              contentAccessibility: true,
+              documentAssembly: false
+            }
+          });
+          const encryptedBytes = await pdfDoc.save();
+          finalBlob = new Blob([encryptedBytes], { type: 'application/pdf' });
+          alert('डाउनलोड की गई फाइल पासवर्ड से सुरक्षित है। पासवर्ड: #8888');
+        } else {
+          // Normal Download (download=1)
+          finalBlob = new Blob([state.rawBytes], { type: 'application/pdf' });
+        }
+
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(finalBlob);
+        link.download = state.downloadMode === '0' ? `protected_${filename}` : filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (err) {
+        alert('डाउनलोड प्रक्रिया विफल रही: ' + err.message);
+      } finally {
+        elements.loadingBar.style.display = 'none';
+      }
+    }
+
+    // 8. Event Bindings
+    $('tool-prev').onclick = () => scrollToPage(state.currentPage - 1);$('tool-next').onclick = () => scrollToPage(state.currentPage + 1);
+    $('m-btn-prev').onclick = () => scrollToPage(state.currentPage - 1);$('m-btn-next').onclick = () => scrollToPage(state.currentPage + 1);
+
+    elements.pageNum.onchange = (e) => {
+      let p = parseInt(e.target.value) || 1;
+      scrollToPage(Math.min(Math.max(1, p), state.totalPages));
+    };
+
+    $('tool-zoom-in').onclick = () => {
+      state.fitMode = 'custom';
+      state.scale = +(state.scale + 0.25).toFixed(2);
+      elements.zoomSelect.value = state.scale;
+      calculateScaleAndRender();
+    };
+
+    $('tool-zoom-out').onclick = () => {
+      if (state.scale <= 0.4) return;
+      state.fitMode = 'custom';
+      state.scale = +(state.scale - 0.25).toFixed(2);
+      elements.zoomSelect.value = state.scale;
+      calculateScaleAndRender();
+    };
+
+    elements.zoomSelect.onchange = (e) => {
+      const val = e.target.value;
+      state.fitMode = ['auto', 'page-fit', 'page-width'].includes(val) ? val : 'custom';
+      if (state.fitMode === 'custom') state.scale = parseFloat(val);
+      calculateScaleAndRender();
+    };
+
+    // Rotate Function
+    const handleRotate = () => {
+      state.rotation = (state.rotation + 90) % 360;
+      calculateScaleAndRender();
+    };
+    $('tool-rotate').onclick = handleRotate;
+    $('m-action-rotate').onclick = () => {
+      handleRotate();
+      elements.mobileMenu.classList.remove('open');
+    };
+
+    // Sidebar Toggles
+    const toggleSidebar = () => elements.sidebar.classList.toggle('show');
+    $('tool-sidebar').onclick = toggleSidebar;
+    $('m-btn-sidebar').onclick = toggleSidebar;
+
+    // Fullscreen
+    $('tool-fullscreen').onclick = () => {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+      else document.exitFullscreen();
+    };
+
+    // Print Handlers
+    const handlePrint = () => window.print();
+    $('tool-print').onclick = handlePrint;
+    $('m-action-print').onclick = () => {
+      elements.mobileMenu.classList.remove('open');
+      handlePrint();
+    };
+
+    // Download Handlers
+    $('tool-download').onclick = executeDownload;
+    $('m-action-download').onclick = () => {
+      elements.mobileMenu.classList.remove('open');
+      executeDownload();
+    };
+
+    // Mobile Action Menu Toggle
+    $('m-btn-menu').onclick = (e) => {
+      e.stopPropagation();
+      elements.mobileMenu.classList.toggle('open');
+    };
+
+    document.addEventListener('click', (e) => {
+      if (!elements.mobileMenu.contains(e.target) && e.target !== $('m-btn-menu')) {
+        elements.mobileMenu.classList.remove('open');
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      if (state.fitMode !== 'custom') calculateScaleAndRender();
+    });
+
+    // Start App
+    parseURLSettings();
+    loadDocument();
+  </script>
+</body>
+</html>
