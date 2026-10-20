@@ -625,33 +625,7 @@
       const p = new URLSearchParams(window.location.search);
 
       // Default sample fallback
-      /* state.pdfUrl = p.get('url') || 'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf'; */
-      
-      // PDF URL: Decode only if needed; do not use encodeURIComponent()
-function getDirectPdfUrl() {
-    const params = new URLSearchParams(window.location.search);
-    let url = params.get('url');
-
-    if (!url) {
-        return 'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf';
-    }
-
-    // Encoded URL हो तो उसे decode करें।
-    // पहले से सामान्य URL हो तो उसे वैसा ही रहने दें।
-    try {
-        if (/%[0-9a-fA-F]{2}/.test(url)) {
-            url = decodeURIComponent(url);
-        }
-    } catch (e) {
-        console.warn('URL decode नहीं हो सका:', e);
-    }
-
-    return url;
-}
-
-state.pdfUrl = getDirectPdfUrl();
-
-
+      state.pdfUrl = p.get('url') || 'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf'; 
 
 
       state.documentTitle = (p.get('title') || '').trim() || getTitleFromUrl(state.pdfUrl) || 'PDF Viewer';
